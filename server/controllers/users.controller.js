@@ -47,36 +47,38 @@ const getUserById = async (req,res)=>{
         res.status(500).send(e);}
 }
 
-const updateCredit = (req,res)=>{
+// const user = await User.findByIdAndUpdate(id, { $inc: { cash: +cash } }, { new: true, runValidators: true });
+
+const updateCredit = async (req,res)=>{
+    if(req.body.credit > 0)
+    {
+        const updates = Object.keys(req.body);
+        const allowedUpdates = ['credit','cash'];
+        const isValidOperation = updates.every((update)=>{
+            console.log(update,allowedUpdates.includes(update));
+            return allowedUpdates.includes(update)
+        });
     
+        if(!isValidOperation){
+            return res.status(400).send("Error: Invalid Update");
+        }
+    
+        try{
+            const id= req.params.id;
+            const user = await userModel.findOneAndUpdate({"passportId":id},{$inc: { "accountDetails.credit": +req.body.credit }},{new:true, runValidators:true});
+            if(!user){
+                return res.status(400).send('User not found');
+            }
+            res.send(user);
+        }catch(e){
+            res.status(400).send(e);
+        }
+    }  
+    else{
+        return res.status(400).send('Bad request, Negative credit is not allowed');
+    }
 
 }
-// const updateCredit = (req,res) =>{
-//     if((req.params.credit)>0){
-//         let result = findUserById(req.params.id);
-//         if(result){
-//             users.map((u)=>{
-//                 if(u.id == req.params.id){
-//                     u.credit+=parseInt(req.params.credit);
-//                     try{
-//                         fs.writeFileSync('./users.json', JSON.stringify(users));
-//                         return res.status(200).json({success: 'Credit updated'});
-//                     }catch(err) {
-//                         console.error(err);
-//                         res.status(500).send('Internal Server Error');
-//                     }   
-//                 }
-//             })
-//         }
-//         else{
-//             return res.status(404).send('User not found');
-//         }
-//         }
-//     else{
-//         return res.status(400).send('Bad request, Negative credit is not allowed');
-//     }  
-// }
-
 
 
 // const depositing = (req,res) =>{
