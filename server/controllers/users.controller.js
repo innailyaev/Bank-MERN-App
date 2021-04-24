@@ -1,19 +1,21 @@
 // let uniqid = require('uniqid');
 const userModel = require('../models/users.model');
+const transactionsModel = require('../models/transactions.model');
 
 const addUser = async (req, res) => {
     // const data = req.body;
-    const {Name, passportId, email,accountDetails} = req.body;
+    const {Name, passportId, email,isActive,accountDetails} = req.body;
    
     const user = new userModel({
         Name:Name,
         passportId: passportId,
         email:email,
+        isActive:isActive,
         accountDetails:accountDetails
     });
 
     if(!passportId){
-        return res.status(200).json({error: 'Passport Id` is required'})
+        return res.status(200).json({error: 'Passport Id is required'})
     }
 
     try{
@@ -47,13 +49,10 @@ const getUserById = async (req,res)=>{
         res.status(500).send(e);}
 }
 
-// const user = await User.findByIdAndUpdate(id, { $inc: { cash: +cash } }, { new: true, runValidators: true });
-
 const updateCredit = async (req,res)=>{
-    if(req.body.credit > 0)
-    {
+   
         const updates = Object.keys(req.body);
-        const allowedUpdates = ['credit','cash'];
+        const allowedUpdates = ['credit','cash','isActive'];
         const isValidOperation = updates.every((update)=>{
             console.log(update,allowedUpdates.includes(update));
             return allowedUpdates.includes(update)
@@ -62,12 +61,13 @@ const updateCredit = async (req,res)=>{
         if(!isValidOperation){
             return res.status(400).send("Error: Invalid Update");
         }
-    
+
+    if(req.body.credit > 0){
         try{
             const id= req.params.id;
-            const user = await userModel.findOneAndUpdate({"passportId":id},{$inc: { "accountDetails.credit": +req.body.credit }},{new:true, runValidators:true});
+            const user = await userModel.findOneAndUpdate({ $and: [ {"passportId":id}, {"isActive":true} ] },{$inc: { "accountDetails.credit": +req.body.credit }},{new:true, runValidators:true});
             if(!user){
-                return res.status(400).send('User not found');
+                return res.status(400).send('User not found or account is not active');
             }
             res.send(user);
         }catch(e){
@@ -80,113 +80,110 @@ const updateCredit = async (req,res)=>{
 
 }
 
+const depositing = async (req,res) =>{
+    if((req.body.amount) > 0){
+        try{
+            const id= req.params.id;
+            const user = await userModel.findOneAndUpdate({"passportId":id},{$inc: { "accountDetails.cash": req.body.amount }},{new:true, runValidators:true});
+            if(!user){
+                return res.status(400).send('User not found');
+            }
+            else{
+            const transaction = new transactionsModel({
+                passportId:id,
+                transactionType:"Depositing",
+                amount:req.body.amount,
+            });
+            const result = await transaction.save();
+            res.status(200).json({ user: user, transaction: result });
+        }
+        }catch(e){
+            res.status(400).send(e);
+        }
+    }  
+    else{
+        return res.status(400).send('Bad request, Negative amount is not allowed');
+    }
+}
 
-// const depositing = (req,res) =>{
-//     if((req.params.amount) > 0){
-//         let result = findUserById(req.params.id);
-//         if(result){
-//             users.map((u)=>{
-//                 if(u.id == req.params.id){
-//                     u.cash+=parseInt(req.params.amount);
-//                     try{
-//                         fs.writeFileSync('./users.json', JSON.stringify(users));
-//                         return res.status(200).json({success: 'The deposit was made successfully'});
-//                     }catch(err){
-//                         console.error(err);
-//                         res.status(500).send('Internal Server Error');
-//                     }   
-//                 }   
-//             })
-//         }
-//         else{
-//             return res.status(404).send('User not found');
-//         }
-//     }
-//     else{
-//         return res.status(400).send('Bad request, Negative amount is not allowed');
-//     }
-// }
+const withdrawMoney = async(req,res)=>{
+    if((req.body.amount) > 0){
+        try{
+            const id= req.params.id;
+            const user = await userModel.find({"passportId":id});
+            if(!user){
+                return res.status(400).send('User not found');
+            }
+            if((user[0].accountDetails.cash + user[0].accountDetails.credit) >= req.body.amount )
+            {
+                const userUpdated = await userModel.findOneAndUpdate({"passportId":id},{$inc: { "accountDetails.cash": -req.body.amount }},{new:true, runValidators:true});
+                
+                const transaction = new transactionsModel({
+                    passportId:id,
+                    transactionType:"Withdrawal",
+                    amount:req.body.amount
+                });
+                const result = await transaction.save();
+                res.status(200).json({ user: userUpdated, transaction: result });     
+            }
+            else{
+                return res.status(200).send('The requested amount could not be withdrawn');
+            }
+            
+        }catch(e){
+            res.status(400).send(e);
+        }
+    }  
+    else{
+        return res.status(400).send('Bad request, Negative amount is not allowed');
+    }
+}
 
+const transference = async (req,res) =>{
+    const {fromId,toId,amount} = req.body;
+    
+    if(amount > 0){
+        const user1 = await userModel.find({"passportId":fromId});
+            if(!user1){
+                return res.status(400).send('User not found');
+            }
+            if((user1[0].accountDetails.cash + user1[0].accountDetails.credit) >= amount )
+            {
+                const user2 = await userModel.find({"passportId":toId});
+                console.log(user2);
+                if(!user2){
+                    return res.status(400).send('User not found');
+                }
+                
+                else{
+                    const user1Updated = await userModel.findOneAndUpdate({"passportId":fromId},{$inc: { "accountDetails.cash": -amount }},{new:true, runValidators:true});
+                    const user2Updated = await userModel.findOneAndUpdate({"passportId":toId},{$inc: { "accountDetails.cash": +amount }},{new:true, runValidators:true});
+                    const users = [];
+                    users.push(user1Updated);
+                    users.push(user2Updated);
+                    res.status(200).json({users:users});
 
-// const withdrawMoney = (req,res)=>{
-//     if((req.params.cash) > 0){
-//     let result = findUserById(req.params.id);
-//         if(result){
-//             users.map((u)=>{
-//                 if(u.id == req.params.id){
-//                     if((u.cash+u.credit) >= req.params.cash){
-//                         u.cash-=parseInt(req.params.cash);
-//                         try{
-//                             fs.writeFileSync('./users.json', JSON.stringify(users));
-//                             return res.status(200).json({success: 'Withdrawal of funds was successful'});
-//                         }catch(err) {
-//                             console.error(err);
-//                             res.status(500).send('Internal Server Error');
-//                         }   
-//                     }
-//                     else{
-//                         return res.status(200).send('The requested amount could not be withdrawn');
-//                     }
-//                 }
-//             })}
-//             else{
-//                 return res.status(404).send('User not found');
-//             }
-//     }
-//     else{
-//         return res.status(400).send('Bad request, Negative cash is not allowed');
-//     } 
-// }
+                }
+            }
+            else{
+                return res.status(200).send('The requested amount could not be transfer');
+            }
+    }
+    else{
+        return res.status(400).send('Bad request, Negative cash is not allowed');
+    }
+}
 
-// const transferring = (req,res)=>{
-//     if((req.params.cash) > 0){
-//         let result1 = findUserById(req.params.userId1);
-//         let result2 = findUserById(req.params.userId2);
-
-//             if(result1 && result2){
-//                 users.map((u)=>{
-//                     if(u.id == req.params.userId1){
-//                         if((u.cash+u.credit) >= req.params.cash){
-//                             u.cash-=parseInt(req.params.cash);
-//                             users.map((u)=>{
-//                                 if(u.id == req.params.userId2){
-//                                     u.cash+=parseInt(req.params.cash);
-//                                     fs.writeFileSync('./users.json', JSON.stringify(users));
-//                                     return res.status(200).json({success: 'Transfer completed successfully'});
-//                                 }
-//                             })
-//                         }
-//                         else{
-//                             return res.status(200).send('The requested amount could not be transfer');
-//                         }
-//                     }
-//                 })}
-//                 else{
-//                     return res.status(404).send('User not found');
-//                 }
-//     }
-//     else{
-//         return res.status(400).send('Bad request, Negative cash is not allowed');
-//     } 
-// }
-
-// const deleteUser = (req,res) =>{
-//     const {userId} = req.params;
-//     let user = findUserById(userId);
-//     if(user){
-//         users.map((u,index)=>{
-//             if(u.id == userId){
-//                 users.splice(index,1);
-//                 fs.writeFileSync('./users.json', JSON.stringify(users));
-//                 return res.status(200).json({success: 'User deleted successfully'});
-//             }
-//         })
-//     }
-//     else
-//         return res.status(404).send('User not found');
-// }
-
-
+const deleteUser = async (req,res)=>{
+    const {userId} = req.params;
+    const user = await userModel.findOneAndDelete({"passportId":userId});
+    if(!user){
+        return res.status(400).send('User not found');
+    }
+    else{
+        return res.status(200).json({success: 'User deleted successfully'});
+    }
+}
 
 // const getUsersByAmount= (req,res)=>{
 //     const {amount} = req.params;
@@ -205,9 +202,9 @@ module.exports = {
     getUsers,
     getUserById,
     // getUsersByAmount,
-    // depositing,
+    depositing,
     updateCredit,
-    // withdrawMoney,
-    // transferring,
-    // deleteUser
+    withdrawMoney,
+    transference,
+    deleteUser
 }
