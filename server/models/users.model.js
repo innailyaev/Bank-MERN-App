@@ -17,13 +17,13 @@ const usersSchema = mongoose.Schema({
         type: String,
         trim: true,
         lowercase: true,
-        unique: true,
+        unique: false,
         required:false,   
-        validate(value){
-            if(!(validator.isEmail(value))){
-                throw new Error ("Email is invalid")
-            }   
-        } 
+        // validate(value){
+        //     if(!(validator.isEmail(value))){
+        //         throw new Error ("Email is invalid")
+        //     }   
+        // } 
     },
     isActive: {
         type: Boolean,
