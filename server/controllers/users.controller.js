@@ -42,6 +42,9 @@ const getUsers = async (req, res) => {
 
 const getUserById = async (req,res)=>{
     const id= req.params.userId;
+    if(!id){
+        return res.status(200).json({error: 'Id is required'})
+    }
     try{
         const user = await userModel.find({"passportId":id});
         console.log(user);
