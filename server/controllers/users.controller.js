@@ -18,6 +18,10 @@ const addUser = async (req, res) => {
         return res.status(200).json({error: 'Passport Id is required'})
     }
 
+    if(!Name){
+        return res.status(200).json({error: 'Name is required'})
+    }
+
     try{
         await user.save();
         res.json({"success": user});
